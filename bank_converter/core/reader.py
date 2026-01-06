@@ -411,14 +411,12 @@ def parse_amount(amount_str: str) -> float:
 
 def parse_date(date_str: str) -> str:
     """
-    Convert 'DD.MM.YYYY HH:MM:SS' to 'DD.MM.YYYY'.
+    Convert various date formats to 'DD.MM.YYYY'.
 
-    === LEARNING: Simple string manipulation ===
-    Sometimes simple string operations are better than regex.
-    [C++] Would use find() and substr()
-
-    Args:
-        date_str: Date string with optional time component.
+    Supported inputs:
+    - 'DD.MM.YYYY'
+    - 'DD.MM.YYYY HH:MM:SS'
+    - 'YYYY-MM-DD'
 
     Returns:
         Date string in DD.MM.YYYY format.
@@ -429,14 +427,18 @@ def parse_date(date_str: str) -> str:
     # Defensive: ensure string type and clean
     date_str = str(date_str).strip().strip('"')
 
-    # === LEARNING: 'in' operator for substring check ===
-    # [C++] Like: date_str.find(' ') != std::string::npos
-    # [JS] Like: date_str.includes(' ')
+    # Remove time if present
     if ' ' in date_str:
-        # === LEARNING: split() and indexing ===
-        # .split(' ') returns list of parts: ["28.12.2025", "10:30:00"]
-        # [0] takes the first element
-        # [C++] Like: date_str.substr(0, date_str.find(' '))
         date_str = date_str.split(' ')[0]
 
+    # Handle ISO format: YYYY-MM-DD
+    if '-' in date_str:
+        # [C++] split + index mapping
+        # '2025-12-28' -> ['2025', '12', '28']
+        parts = date_str.split('-')
+        if len(parts) == 3:
+            yyyy, mm, dd = parts
+            return f"{dd}.{mm}.{yyyy}"
+
+    # Already in DD.MM.YYYY (or unknown but left untouched)
     return date_str
