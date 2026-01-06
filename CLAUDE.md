@@ -6,6 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bank to Budget Converter - A Python/Tkinter desktop application that converts Russian bank export files (CSV/XLSX) into a format suitable for Google Sheets budget tracking.
 
+## Educational Focus
+
+**This codebase is designed as a Python learning resource for developers coming from JavaScript and C++.**
+
+When modifying this codebase, please:
+- Add comprehensive inline comments explaining Python concepts
+- Use `[C++]` prefix for C++ comparisons (priority - less familiar to learners)
+- Use `[JS]` prefix for JavaScript comparisons (when helpful, but don't over-explain obvious 1:1 mappings)
+- Explain Python-specific patterns: context managers, list comprehensions, decorators, etc.
+- Reference relevant C++ standard library equivalents (std::optional, std::filesystem, RAII, etc.)
+- Keep learning comments in `=== LEARNING: ===` blocks for consistency
+
+Example comment style:
+```python
+# === LEARNING: Context Manager ===
+# [C++] Like RAII - resource automatically released when scope ends
+# [JS] Like try-finally but cleaner
+with open(path, 'r') as f:
+    content = f.read()
+```
+
 ## Running the Application
 
 ```bash

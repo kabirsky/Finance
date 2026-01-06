@@ -1,29 +1,88 @@
-"""Main conversion logic for bank data."""
+"""
+Main conversion logic for bank data.
 
+=== LEARNING: This module demonstrates ===
+- Tuples for returning multiple values
+- Sets for tracking unique items efficiently
+- Union types (Python 3.10+ syntax: Type | None)
+- Separation of concerns (converter doesn't know about file I/O)
+- The "in" operator for membership testing
+"""
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
 from typing import List, Tuple, Set
 
+# === LEARNING: Importing from multiple modules ===
+# [C++] Like having multiple #include statements
 from .models import BankTransaction, BudgetTransaction, TransactionType, UnknownMapping
 from .reader import parse_amount, parse_date
 from ..config.manager import ConfigManager
 
 
 class BankConverter:
-    """Converts bank transactions to budget format."""
+    """
+    Converts bank transactions to budget format.
+
+    === LEARNING: Single Responsibility Principle ===
+    This class ONLY handles conversion logic. It doesn't:
+    - Read files (that's BankFileReader's job)
+    - Write output (that's BudgetWriter's job)
+    - Manage config (that's ConfigManager's job)
+
+    [C++] Like keeping classes focused on one task,
+          using dependency injection for other services.
+    """
 
     def __init__(self, config: ConfigManager):
-        """Initialize converter with config.
+        """
+        Initialize converter with config.
+
+        === LEARNING: Dependency Injection ===
+        We receive ConfigManager instead of creating it ourselves.
+        This makes the class testable and flexible.
+
+        [C++] Like passing dependencies through constructor:
+              BankConverter(ConfigManager& config) : config_(config) {}
 
         Args:
             config: ConfigManager instance with mappings.
         """
         self.config = config
+
+        # === LEARNING: Type hints for collection attributes ===
+        # List[UnknownMapping] = list containing UnknownMapping objects
+        # [C++] Like: std::vector<UnknownMapping> unknown_mappings;
         self.unknown_mappings: List[UnknownMapping] = []
+
+        # === LEARNING: Set with Tuple elements ===
+        # Set[Tuple[str, str]] = set of 2-element tuples of strings
+        # [C++] Like: std::unordered_set<std::pair<std::string, std::string>>
+        #
+        # Sets are:
+        # - Unordered collections of UNIQUE elements
+        # - O(1) average lookup time (uses hashing)
+        # - Elements must be hashable (tuples are, lists aren't!)
         self._seen_unknowns: Set[Tuple[str, str]] = set()
 
     def convert(
         self, transactions: List[BankTransaction]
     ) -> Tuple[List[BudgetTransaction], List[UnknownMapping]]:
-        """Convert bank transactions to budget format.
+        """
+        Convert bank transactions to budget format.
+
+        === LEARNING: Returning Tuples ===
+        Python commonly uses tuples to return multiple values.
+        The caller can unpack: result, unknowns = converter.convert(txs)
+
+        [C++] You'd typically:
+              - Use std::pair or std::tuple
+              - Return a struct
+              - Use output parameters (less Pythonic!)
+
+        [JS] Similar to returning an array and destructuring:
+             const [result, unknowns] = convert(txs);
 
         Args:
             transactions: List of BankTransaction objects.
@@ -31,19 +90,33 @@ class BankConverter:
         Returns:
             Tuple of (converted transactions, unknown mappings needing user input).
         """
+        # Reset state for new conversion run
         self.unknown_mappings = []
         self._seen_unknowns = set()
         result = []
 
+        # === LEARNING: Simple iteration ===
+        # [C++] Like: for (const auto& tx : transactions)
         for tx in transactions:
             budget_tx = self._convert_single(tx)
+
+            # Only append if not None (skipped transactions return None)
             if budget_tx:
                 result.append(budget_tx)
 
+        # Return tuple with parentheses (parentheses are optional for tuples)
         return result, self.unknown_mappings
 
     def _convert_single(self, tx: BankTransaction) -> BudgetTransaction | None:
-        """Convert a single bank transaction.
+        """
+        Convert a single bank transaction.
+
+        === LEARNING: Union Type Syntax (Python 3.10+) ===
+        `BudgetTransaction | None` means "either BudgetTransaction OR None"
+        This is the modern syntax; older code uses Optional[BudgetTransaction]
+
+        [C++] Like: std::optional<BudgetTransaction>
+        [JS] Like TypeScript: BudgetTransaction | null
 
         Args:
             tx: BankTransaction to convert.
@@ -51,35 +124,48 @@ class BankConverter:
         Returns:
             BudgetTransaction or None if should be skipped.
         """
+        # === LEARNING: Early returns for validation ===
+        # Instead of deeply nested if statements, return early.
+        # [C++] Same pattern - check preconditions, return if invalid
+
         # Skip failed transactions
         if tx.status != "OK":
             return None
 
-        # Skip internal transfers
+        # === LEARNING: 'in' operator for membership ===
+        # Checks if tx.description exists in the skip_descriptions list
+        # [C++] Like: std::find(list.begin(), list.end(), value) != list.end()
+        #       But much more readable!
         if tx.description in self.config.skip_descriptions:
             return None
 
-        # Parse amount
+        # Parse amount from string to float
         amount = parse_amount(tx.amount)
 
         # Skip zero amounts
         if amount == 0:
             return None
 
-        # Determine transaction type
+        # Determine transaction type (income/expense/skip)
         tx_type = self._determine_type(amount, tx.category)
 
         if tx_type == TransactionType.SKIP:
             return None
 
-        # Get tag and purpose
+        # Get tag and purpose from mappings
         tag, purpose = self._get_mapping(tx.category, tx.description)
 
-        # Create budget transaction
+        # === LEARNING: Creating dataclass instance ===
+        # [C++] Like calling constructor with named parameters (C++20 designated init):
+        #       BudgetTransaction{
+        #           .owner = config.owner,
+        #           .date = parse_date(tx.operation_date),
+        #           ...
+        #       };
         return BudgetTransaction(
             owner=self.config.owner,
             date=parse_date(tx.operation_date),
-            amount=abs(amount),
+            amount=abs(amount),  # abs() = absolute value
             purpose=purpose,
             tag=tag,
             comment="",
@@ -87,7 +173,12 @@ class BankConverter:
         )
 
     def _determine_type(self, amount: float, category: str) -> TransactionType:
-        """Determine if transaction is income, expense, or should be skipped.
+        """
+        Determine if transaction is income, expense, or should be skipped.
+
+        === LEARNING: Enum comparisons ===
+        [C++] Like: return TransactionType::INCOME;
+        [JS] Like: return TransactionType.INCOME;
 
         Args:
             amount: Transaction amount (positive or negative).
@@ -97,9 +188,12 @@ class BankConverter:
             TransactionType enum value.
         """
         # Income categories are always income regardless of sign
+        # === LEARNING: 'in' with list membership ===
+        # [C++] Like: std::find in a vector
         if category in self.config.income_categories:
             return TransactionType.INCOME
 
+        # Simple sign-based determination
         if amount > 0:
             return TransactionType.INCOME
         elif amount < 0:
@@ -108,7 +202,12 @@ class BankConverter:
         return TransactionType.SKIP
 
     def _get_mapping(self, category: str, description: str) -> Tuple[str, str]:
-        """Get tag and purpose for a transaction.
+        """
+        Get tag and purpose for a transaction.
+
+        === LEARNING: Dict membership with 'in' ===
+        'key in dict' checks if key exists in dictionary.
+        [C++] Like: dict.find(key) != dict.end() or dict.count(key) > 0
 
         Args:
             category: Bank category.
@@ -118,8 +217,14 @@ class BankConverter:
             Tuple of (tag, purpose/name).
         """
         # First check vendor overrides (higher priority)
+        # === LEARNING: Dictionary access patterns ===
+        # 1. dict[key] - raises KeyError if not found
+        # 2. dict.get(key) - returns None if not found
+        # 3. dict.get(key, default) - returns default if not found
+        # 4. key in dict - checks existence
         if description in self.config.vendor_overrides:
             override = self.config.vendor_overrides[description]
+            # .get() with default value for optional key
             return override["tag"], override.get("назначение", description)
 
         # Then check category mappings
@@ -132,17 +237,36 @@ class BankConverter:
         return "Неизвестно", description
 
     def _add_unknown(self, category: str, description: str):
-        """Track unknown mappings for user resolution.
+        """
+        Track unknown mappings for user resolution.
+
+        === LEARNING: Sets for deduplication ===
+        Sets automatically handle uniqueness - adding duplicate has no effect.
+        [C++] Like std::unordered_set::insert - ignores duplicates
 
         Args:
             category: Unknown bank category.
             description: Vendor/person description.
         """
-        # Track if we've already added this
+        # === LEARNING: Tuples as dict/set keys ===
+        # Tuples are immutable, so they're hashable and can be set elements.
+        # Lists are mutable, so they CAN'T be set elements!
+        # [C++] Like: std::pair<std::string, std::string> can be a map key
+
+        # Track if we've already added this category
         key = ("category", category)
+
+        # === LEARNING: 'and' for short-circuit evaluation ===
+        # Python's 'and' works like C++'s '&&' - second condition
+        # only evaluated if first is true (short-circuit)
         if category and category not in self.config.category_mappings:
+            # === LEARNING: 'not in' - negated membership ===
+            # [C++] Like: set.find(key) == set.end()
             if key not in self._seen_unknowns:
+                # .add() for sets (vs .append() for lists)
                 self._seen_unknowns.add(key)
+
+                # Create UnknownMapping dataclass instance
                 unknown = UnknownMapping(
                     mapping_type="category",
                     original_value=category,
@@ -151,7 +275,7 @@ class BankConverter:
                 )
                 self.unknown_mappings.append(unknown)
 
-        # For "Переводы" category, also track vendor for potential override
+        # For "Переводы" (Transfers) category, also track vendor for potential override
         # This helps identify recurring transfers to specific people
         if category == "Переводы":
             key = ("vendor", description)

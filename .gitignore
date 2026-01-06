@@ -26,3 +26,5 @@ Thumbs.db
 # Project specific
 bank_converter/mappings.json
 *.log
+
+.claude/
